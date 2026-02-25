@@ -117,7 +117,7 @@ type CommsResponse = {
   timestamp: number;
 };
 
-const defaultBaseUrl = import.meta.env.VITE_RELAY_BASE_URL ?? "http://127.0.0.1:8787";
+const defaultBaseUrl = import.meta.env.VITE_RELAY_BASE_URL ?? "/api";
 const defaultAuthKey = import.meta.env.VITE_RELAY_AUTHKEY ?? "";
 
 function App() {
@@ -142,8 +142,17 @@ function App() {
 
   const makeUrl = useCallback(
     (path: string, query: Record<string, string | null | undefined>) => {
-      const normalizedBase = baseUrl.endsWith("/") ? baseUrl.slice(0, -1) : baseUrl;
-      const url = new URL(`${normalizedBase}${path}`);
+      const normalizedBase = (baseUrl || "/api").trim();
+      const absoluteBase =
+        normalizedBase.startsWith("http://") || normalizedBase.startsWith("https://")
+          ? normalizedBase
+          : new URL(
+              normalizedBase.startsWith("/") ? normalizedBase : `/${normalizedBase}`,
+              window.location.origin,
+            ).toString();
+      const baseWithSlash = absoluteBase.endsWith("/") ? absoluteBase : `${absoluteBase}/`;
+      const relativePath = path.startsWith("/") ? path.slice(1) : path;
+      const url = new URL(relativePath, baseWithSlash);
       if (authKey.trim()) {
         url.searchParams.set("authkey", authKey.trim());
       }

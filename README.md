@@ -30,7 +30,7 @@ npm run preview
 Edit `.env.local`:
 
 ```env
-VITE_RELAY_BASE_URL=http://127.0.0.1:8787
+VITE_RELAY_BASE_URL=/api
 VITE_RELAY_AUTHKEY=change-me
 ```
 
