@@ -48,6 +48,19 @@ const ROOM_SIZE_W = 700;
 const ROOM_SIZE_H = 500;
 const CENTER_X = MAP_CONFIG.width / 2;
 const CENTER_Y = MAP_CONFIG.height / 2;
+const DOOR_HALF_GAP = 50;
+
+type DoorDirection = "north" | "south" | "west" | "east";
+type EdgeDirection = "top" | "bottom" | "left" | "right";
+
+type RoomLayout = {
+  id: string;
+  centerX: number;
+  centerY: number;
+  width: number;
+  height: number;
+  doors: DoorDirection[];
+};
 
 const ROOM_VARIANTS: Array<{ item: string; size: [number, number] }> = [
   { item: "/room-assets/wagon.webp", size: [128, 128] },
@@ -61,88 +74,122 @@ const ROOM_VARIANTS: Array<{ item: string; size: [number, number] }> = [
   { item: "/room-assets/laptop.png", size: [32, 32] },
 ];
 
-function generateStoneRoom(
-  centerX: number,
-  centerY: number,
-  roomWidth: number,
-  roomHeight: number,
-  doors: Array<"north" | "south" | "west" | "east">,
-  roomIdPrefix: string,
-) {
+function roomBounds(room: RoomLayout) {
+  return {
+    left: room.centerX - room.width / 2,
+    right: room.centerX + room.width / 2,
+    top: room.centerY - room.height / 2,
+    bottom: room.centerY + room.height / 2,
+  };
+}
+
+function toDoor(edge: EdgeDirection): DoorDirection {
+  if (edge === "top") return "north";
+  if (edge === "bottom") return "south";
+  if (edge === "left") return "west";
+  return "east";
+}
+
+function oppositeDoor(edge: EdgeDirection): DoorDirection {
+  if (edge === "top") return "south";
+  if (edge === "bottom") return "north";
+  if (edge === "left") return "east";
+  return "west";
+}
+
+function findAdjacentRoom(room: RoomLayout, allRooms: RoomLayout[], edge: EdgeDirection) {
+  const a = roomBounds(room);
+  return allRooms.find((other) => {
+    if (other.id === room.id) return false;
+    const b = roomBounds(other);
+    if (edge === "top") {
+      return b.bottom === a.top && Math.max(a.left, b.left) < Math.min(a.right, b.right);
+    }
+    if (edge === "bottom") {
+      return b.top === a.bottom && Math.max(a.left, b.left) < Math.min(a.right, b.right);
+    }
+    if (edge === "left") {
+      return b.right === a.left && Math.max(a.top, b.top) < Math.min(a.bottom, b.bottom);
+    }
+    return b.left === a.right && Math.max(a.top, b.top) < Math.min(a.bottom, b.bottom);
+  });
+}
+
+function shouldRenderEdge(room: RoomLayout, edge: EdgeDirection, neighbor: RoomLayout | undefined) {
+  if (!neighbor) return true;
+  if (edge === "bottom") return room.centerY < neighbor.centerY;
+  if (edge === "right") return room.centerX < neighbor.centerX;
+  return false;
+}
+
+function hasDoorOnEdge(room: RoomLayout, edge: EdgeDirection) {
+  return room.doors.includes(toDoor(edge));
+}
+
+function shouldSkipForDoor(centerX: number, centerY: number, pointX: number, pointY: number, edge: EdgeDirection) {
+  if (edge === "top" || edge === "bottom") {
+    return Math.abs(pointX - centerX) < DOOR_HALF_GAP;
+  }
+  return Math.abs(pointY - centerY) < DOOR_HALF_GAP;
+}
+
+function generateStoneRoomWalls(room: RoomLayout, allRooms: RoomLayout[]) {
   const objects: SceneObject[] = [];
   const rockAsset = "/room-assets/iron_rock.png";
   const wallStep = 28;
   const displaySize = 48;
+  const bounds = roomBounds(room);
+  let idCounter = 0;
 
-  const startX = centerX - roomWidth / 2;
-  const startY = centerY - roomHeight / 2;
-  const endX = centerX + roomWidth / 2;
-  const endY = centerY + roomHeight / 2;
-
-  const isDoorGap = (x: number, y: number, edge: "top" | "bottom" | "left" | "right") => {
-    if (edge === "top" && doors.includes("north") && Math.abs(x - centerX) < 100) return true;
-    if (edge === "bottom" && doors.includes("south") && Math.abs(x - centerX) < 100) return true;
-    if (edge === "left" && doors.includes("west") && Math.abs(y - centerY) < 100) return true;
-    if (edge === "right" && doors.includes("east") && Math.abs(y - centerY) < 100) return true;
-    return false;
+  const pushHorizontal = (edge: "top" | "bottom", y: number) => {
+    const neighbor = findAdjacentRoom(room, allRooms, edge);
+    if (!shouldRenderEdge(room, edge, neighbor)) return;
+    const hasDoor =
+      hasDoorOnEdge(room, edge) ||
+      (neighbor ? neighbor.doors.includes(oppositeDoor(edge)) : false);
+    for (let x = bounds.left; x <= bounds.right; x += wallStep) {
+      if (hasDoor && shouldSkipForDoor(room.centerX, room.centerY, x, y, edge)) continue;
+      objects.push({
+        id: `${room.id}_wall_${edge}_${idCounter++}`,
+        type: rockAsset,
+        x,
+        y,
+        width: displaySize,
+        height: displaySize,
+        z: y + displaySize,
+      });
+    }
   };
 
-  let idCounter = 0;
-  for (let x = startX; x <= endX; x += wallStep) {
-    if (!isDoorGap(x, startY, "top")) {
+  const pushVertical = (edge: "left" | "right", x: number) => {
+    const neighbor = findAdjacentRoom(room, allRooms, edge);
+    if (!shouldRenderEdge(room, edge, neighbor)) return;
+    const hasDoor =
+      hasDoorOnEdge(room, edge) ||
+      (neighbor ? neighbor.doors.includes(oppositeDoor(edge)) : false);
+    for (let y = bounds.top; y <= bounds.bottom; y += wallStep) {
+      if (y === bounds.top || y > bounds.bottom - wallStep) continue;
+      if (hasDoor && shouldSkipForDoor(room.centerX, room.centerY, x, y, edge)) continue;
       objects.push({
-        id: `${roomIdPrefix}_wall_top_${idCounter++}`,
+        id: `${room.id}_wall_${edge}_${idCounter++}`,
         type: rockAsset,
         x,
-        y: startY,
-        width: displaySize,
-        height: displaySize,
-        z: startY + displaySize,
-      });
-    }
-    if (!isDoorGap(x, endY, "bottom")) {
-      objects.push({
-        id: `${roomIdPrefix}_wall_bottom_${idCounter++}`,
-        type: rockAsset,
-        x,
-        y: endY,
-        width: displaySize,
-        height: displaySize,
-        z: endY + displaySize,
-      });
-    }
-  }
-
-  for (let y = startY; y <= endY; y += wallStep) {
-    if (y === startY || y > endY - wallStep) continue;
-    if (!isDoorGap(startX, y, "left")) {
-      objects.push({
-        id: `${roomIdPrefix}_wall_left_${idCounter++}`,
-        type: rockAsset,
-        x: startX,
         y,
         width: displaySize,
         height: displaySize,
         z: y + displaySize,
       });
     }
-    if (!isDoorGap(endX, y, "right")) {
-      objects.push({
-        id: `${roomIdPrefix}_wall_right_${idCounter++}`,
-        type: rockAsset,
-        x: endX,
-        y,
-        width: displaySize,
-        height: displaySize,
-        z: y + displaySize,
-      });
-    }
-  }
+  };
 
+  pushHorizontal("top", bounds.top);
+  pushHorizontal("bottom", bounds.bottom);
+  pushVertical("left", bounds.left);
+  pushVertical("right", bounds.right);
   return objects;
 }
 
-function getDoorTowardsCenter(cx: number, cy: number): Array<"north" | "south" | "west" | "east"> {
+function getDoorTowardsCenter(cx: number, cy: number): DoorDirection[] {
   const dx = cx - CENTER_X;
   const dy = cy - CENTER_Y;
   if (Math.abs(dx) > Math.abs(dy)) {
@@ -240,25 +287,55 @@ function createEmployeeRoomCenters(count: number) {
   const centers: Array<{ x: number; y: number }> = [];
   if (count <= 0) return centers;
 
-  let placed = 0;
+  const marginX = ROOM_SIZE_W / 2 + 30;
+  const marginY = ROOM_SIZE_H / 2 + 30;
+  const maxGridX = Math.floor((MAP_CONFIG.width / 2 - marginX) / ROOM_SIZE_W);
+  const maxGridY = Math.floor((MAP_CONFIG.height / 2 - marginY) / ROOM_SIZE_H);
+
   let ring = 1;
-  while (placed < count) {
-    const slots = ring === 1 ? 4 : ring * 8;
-    const radiusX = ring * (ROOM_SIZE_W + 220);
-    const radiusY = ring * (ROOM_SIZE_H + 200);
-    for (let i = 0; i < slots && placed < count; i += 1) {
-      const angle = (Math.PI * 2 * i) / slots - Math.PI / 2;
-      const rawX = CENTER_X + Math.cos(angle) * radiusX;
-      const rawY = CENTER_Y + Math.sin(angle) * radiusY;
-      const marginX = ROOM_SIZE_W / 2 + 80;
-      const marginY = ROOM_SIZE_H / 2 + 80;
-      const x = Math.max(marginX, Math.min(MAP_CONFIG.width - marginX, rawX));
-      const y = Math.max(marginY, Math.min(MAP_CONFIG.height - marginY, rawY));
-      centers.push({ x, y });
-      placed += 1;
+  while (centers.length < count) {
+    const layerCells: Array<{ gx: number; gy: number }> = [];
+    for (let gy = -ring; gy <= ring; gy += 1) {
+      for (let gx = -ring; gx <= ring; gx += 1) {
+        if (Math.max(Math.abs(gx), Math.abs(gy)) !== ring) continue;
+        layerCells.push({ gx, gy });
+      }
+    }
+    layerCells.sort((a, b) => {
+      const da = Math.abs(a.gx) + Math.abs(a.gy);
+      const db = Math.abs(b.gx) + Math.abs(b.gy);
+      return da - db;
+    });
+
+    let appended = false;
+    for (const cell of layerCells) {
+      if (centers.length >= count) break;
+      if (Math.abs(cell.gx) > maxGridX || Math.abs(cell.gy) > maxGridY) continue;
+      centers.push({
+        x: CENTER_X + cell.gx * ROOM_SIZE_W,
+        y: CENTER_Y + cell.gy * ROOM_SIZE_H,
+      });
+      appended = true;
+    }
+
+    if (!appended && ring > Math.max(maxGridX, maxGridY) + 2) {
+      break;
     }
     ring += 1;
   }
+
+  if (centers.length < count) {
+    let fallbackIndex = 0;
+    while (centers.length < count) {
+      const rawX = CENTER_X + ((fallbackIndex % 2 === 0 ? 1 : -1) * (ROOM_SIZE_W + 120) * (fallbackIndex + 1));
+      const rawY = CENTER_Y + ((fallbackIndex % 3 === 0 ? 1 : -1) * (ROOM_SIZE_H + 80) * Math.max(1, Math.floor(fallbackIndex / 2)));
+      const x = Math.max(marginX, Math.min(MAP_CONFIG.width - marginX, rawX));
+      const y = Math.max(marginY, Math.min(MAP_CONFIG.height - marginY, rawY));
+      centers.push({ x, y });
+      fallbackIndex += 1;
+    }
+  }
+
   return centers;
 }
 
@@ -369,27 +446,35 @@ function RelayRoomMap({
   const sceneObjects = useMemo(() => {
     const objects: SceneObject[] = [];
 
-    objects.push(
-      ...generateStoneRoom(
-        CENTER_X,
-        CENTER_Y,
-        ROOM_SIZE_W,
-        ROOM_SIZE_H,
-        ["north", "south", "west", "east"],
-        "boss_center",
-      ),
-    );
-    objects.push(
-      ...createRoomInterior(
-        CENTER_X,
-        CENTER_Y,
-        "boss_room",
-        null,
-        0,
-        false,
-        0,
-      ),
-    );
+    const roomLayouts: RoomLayout[] = [
+      {
+        id: "boss_center",
+        centerX: CENTER_X,
+        centerY: CENTER_Y,
+        width: ROOM_SIZE_W,
+        height: ROOM_SIZE_H,
+        doors: ["north", "south", "west", "east"],
+      },
+    ];
+
+    const centers = createEmployeeRoomCenters(employees.length);
+    employees.forEach((employee, index) => {
+      const center = centers[index];
+      roomLayouts.push({
+        id: `employee_${employee.id}`,
+        centerX: center.x,
+        centerY: center.y,
+        width: ROOM_SIZE_W,
+        height: ROOM_SIZE_H,
+        doors: getDoorTowardsCenter(center.x, center.y),
+      });
+    });
+
+    roomLayouts.forEach((room) => {
+      objects.push(...generateStoneRoomWalls(room, roomLayouts));
+    });
+
+    objects.push(...createRoomInterior(CENTER_X, CENTER_Y, "boss_room", null, 0, false, 0));
     objects.push(
       {
         id: "boss_sign",
@@ -411,21 +496,9 @@ function RelayRoomMap({
       },
     );
 
-    const centers = createEmployeeRoomCenters(employees.length);
     employees.forEach((employee, index) => {
       const center = centers[index];
       const roomPrefix = `employee_${employee.id}`;
-      const doors = getDoorTowardsCenter(center.x, center.y);
-      objects.push(
-        ...generateStoneRoom(
-          center.x,
-          center.y,
-          ROOM_SIZE_W,
-          ROOM_SIZE_H,
-          doors,
-          roomPrefix,
-        ),
-      );
       objects.push(
         ...createRoomInterior(
           center.x,
@@ -568,4 +641,3 @@ function RelayRoomMap({
 }
 
 export default RelayRoomMap;
-
