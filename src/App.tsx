@@ -275,15 +275,12 @@ function App() {
   const selectedConversation = useMemo(() => {
     if (!roomSelection) return [];
     if (roomSelection.mode === "boss") {
-      const rows = communications?.rows ?? [];
-      if (!bossNode) return rows;
-      return rows.filter((row) => row.boss.id === bossNode.id);
+      return communications?.rows ?? [];
     }
 
     const rows = conversationsByEmployee.get(roomSelection.employeeId) ?? [];
-    if (!bossNode) return rows;
-    return rows.filter((row) => row.boss.id === bossNode.id);
-  }, [bossNode, communications?.rows, conversationsByEmployee, roomSelection]);
+    return rows;
+  }, [communications?.rows, conversationsByEmployee, roomSelection]);
 
   return (
     <div className="admin-app">
