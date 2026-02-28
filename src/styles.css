@@ -522,6 +522,136 @@ code {
   font-size: 0.86rem;
 }
 
+.room-game-wrapper {
+  position: relative;
+}
+
+.pixel-border {
+  border: 4px solid #5c4033;
+  border-top-color: #cd853f;
+  border-left-color: #cd853f;
+}
+
+.room-viewport {
+  width: 100%;
+  height: 620px;
+  background-color: #090708;
+  position: relative;
+  overflow: hidden;
+  border-radius: 10px;
+  border: 8px solid #4d1b21;
+  box-shadow: 0 0 20px rgba(0, 0, 0, 0.8);
+  user-select: none;
+}
+
+.world-map-container {
+  will-change: transform;
+}
+
+.room-world-plane {
+  position: absolute;
+  box-shadow: inset 0 0 100px rgba(0, 0, 0, 0.45);
+}
+
+.ui-overlay {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  right: 12px;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.ui-panel {
+  background: rgba(88, 36, 44, 0.9);
+  padding: 8px 12px;
+  color: #ffe8eb;
+  pointer-events: auto;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  border-radius: 4px;
+}
+
+.room-object {
+  image-rendering: pixelated;
+}
+
+.map-object {
+  display: block;
+}
+
+.desk-hitbox {
+  position: absolute;
+  border: none;
+  padding: 0;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.desk-hitbox.selected .desk-object {
+  filter: drop-shadow(0 0 6px rgba(255, 194, 208, 0.85));
+}
+
+.desk-note-badge {
+  position: absolute;
+  right: 8px;
+  top: 10px;
+  min-width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: rgba(30, 8, 12, 0.92);
+  border: 1px solid rgba(255, 195, 205, 0.55);
+  color: #ffdbe1;
+  font-size: 11px;
+  line-height: 16px;
+  text-align: center;
+  padding: 0 4px;
+}
+
+.lobster-character {
+  position: absolute;
+  z-index: 40;
+  transition: all 0.2s;
+}
+
+.pixel-lobster {
+  width: 3px;
+  height: 3px;
+  background: transparent;
+  box-shadow:
+    18px 0px #ff4500, 27px 0px #ff4500,
+    15px 3px #ff4500, 18px 3px #b22222, 27px 3px #b22222, 30px 3px #ff4500,
+    15px 6px #b22222, 21px 6px #ff4500, 24px 6px #ff4500, 30px 6px #b22222,
+    18px 9px #b22222, 21px 9px #ff4500, 24px 9px #ff4500, 27px 9px #b22222,
+    21px 12px #ff4500, 24px 12px #ff4500,
+    18px 15px #ff4500, 21px 15px #b22222, 24px 15px #b22222, 27px 15px #ff4500,
+    15px 18px #ff4500, 18px 18px #ff4500, 21px 18px #ffffff, 24px 18px #ffffff, 27px 18px #ff4500, 30px 18px #ff4500,
+    15px 21px #ff4500, 18px 21px #ff4500, 21px 21px #ff4500, 24px 21px #ff4500, 27px 21px #ff4500, 30px 21px #ff4500,
+    12px 24px #b22222, 15px 24px #ff4500, 18px 24px #ff4500, 21px 24px #ff4500, 24px 24px #ff4500, 27px 24px #ff4500, 30px 24px #ff4500, 33px 24px #b22222,
+    9px 27px #b22222, 12px 27px #ff4500, 15px 27px #b22222, 18px 27px #ff4500, 21px 27px #ff4500, 24px 27px #ff4500, 27px 27px #ff4500, 30px 27px #b22222, 33px 27px #ff4500, 36px 27px #b22222,
+    6px 30px #b22222, 9px 30px #ff4500, 12px 30px #b22222, 18px 30px #ff4500, 27px 30px #ff4500, 33px 30px #b22222, 36px 30px #ff4500, 39px 30px #b22222,
+    12px 33px #ff4500, 18px 33px #b22222, 27px 33px #b22222, 33px 33px #ff4500,
+    15px 36px #ff4500, 30px 36px #ff4500;
+}
+
+.lobster-bounce {
+  animation: lobster-bounce 0.8s infinite alternate steps(2);
+}
+
+@keyframes lobster-bounce {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(-6px);
+  }
+}
+
 @media (max-width: 1200px) {
   .summary-grid {
     grid-template-columns: repeat(3, minmax(150px, 1fr));
@@ -537,6 +667,10 @@ code {
 
   .room-conversation-panel {
     max-height: none;
+  }
+
+  .room-viewport {
+    height: 560px;
   }
 }
 
