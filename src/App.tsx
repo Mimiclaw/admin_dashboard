@@ -106,6 +106,14 @@ type CommsResponse = {
 };
 
 type ViewMode = "dashboard" | "room";
+type RoomSelection =
+  | {
+      mode: "boss";
+    }
+  | {
+      mode: "employee";
+      employeeId: string;
+    };
 
 const defaultBaseUrl = import.meta.env.VITE_RELAY_BASE_URL ?? "/api";
 const defaultAuthKey = import.meta.env.VITE_RELAY_AUTHKEY ?? "";
@@ -124,7 +132,7 @@ function App() {
   const [commUntil, setCommUntil] = useState("");
   const [commLimit, setCommLimit] = useState("100");
   const [commOffset, setCommOffset] = useState("0");
-  const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
+  const [roomSelection, setRoomSelection] = useState<RoomSelection | null>(null);
 
   const [workforce, setWorkforce] = useState<WorkforceResponse | null>(null);
   const [communications, setCommunications] = useState<CommsResponse | null>(null);
@@ -251,11 +259,13 @@ function App() {
   }, [conversationsByEmployee]);
 
   useEffect(() => {
-    if (!selectedEmployeeId) return;
-    if (!employees.some((item) => item.id === selectedEmployeeId)) {
-      setSelectedEmployeeId(null);
+    if (!roomSelection || roomSelection.mode !== "employee") return;
+    if (!employees.some((item) => item.id === roomSelection.employeeId)) {
+      setRoomSelection(null);
     }
-  }, [employees, selectedEmployeeId]);
+  }, [employees, roomSelection]);
+
+  const selectedEmployeeId = roomSelection?.mode === "employee" ? roomSelection.employeeId : null;
 
   const selectedEmployee = useMemo(
     () => employees.find((item) => item.id === selectedEmployeeId) ?? null,
@@ -263,11 +273,17 @@ function App() {
   );
 
   const selectedConversation = useMemo(() => {
-    if (!selectedEmployeeId) return [];
-    const rows = conversationsByEmployee.get(selectedEmployeeId) ?? [];
+    if (!roomSelection) return [];
+    if (roomSelection.mode === "boss") {
+      const rows = communications?.rows ?? [];
+      if (!bossNode) return rows;
+      return rows.filter((row) => row.boss.id === bossNode.id);
+    }
+
+    const rows = conversationsByEmployee.get(roomSelection.employeeId) ?? [];
     if (!bossNode) return rows;
     return rows.filter((row) => row.boss.id === bossNode.id);
-  }, [bossNode, conversationsByEmployee, selectedEmployeeId]);
+  }, [bossNode, communications?.rows, conversationsByEmployee, roomSelection]);
 
   return (
     <div className="admin-app">
@@ -490,7 +506,7 @@ function App() {
             <div className="panel room-canvas-panel">
               <h2>Workforce Office Room</h2>
               <p className="room-hint">
-                Drag to pan the map. Click each employee desk to open meeting notes with boss.
+                Drag to pan the map. Click boss building/lobster for all records, or click any worker-room object for that employee.
               </p>
               {error && <div className="panel error-panel room-error">{error}</div>}
               <RelayRoomMap
@@ -498,16 +514,69 @@ function App() {
                 employees={employees}
                 memoCounts={memoCounts}
                 selectedEmployeeId={selectedEmployeeId}
-                onSelectEmployee={setSelectedEmployeeId}
+                selectedBoss={roomSelection?.mode === "boss"}
+                onSelectEmployee={(employeeId) => setRoomSelection({ mode: "employee", employeeId })}
+                onSelectBoss={() => setRoomSelection({ mode: "boss" })}
               />
             </div>
             <aside className="panel room-conversation-panel">
               <h2>Meeting Notes</h2>
-              {selectedEmployee ? (
+              {roomSelection?.mode === "boss" ? (
+                <>
+                  <div className="conversation-meta">
+                    <strong>{bossNode?.name || "Boss"}</strong>
+                    <span>{bossNode?.id ?? "boss-unassigned"}</span>
+                    <span>Employees: {employees.length}</span>
+                    <span>Records: {selectedConversation.length}</span>
+                  </div>
+                  <div className="conversation-list">
+                    {selectedConversation.length === 0 ? (
+                      <p className="empty-text">No boss communication records found.</p>
+                    ) : (
+                      selectedConversation.map((row, idx) => (
+                        <article className="conversation-item" key={`${row.msg_id}-${row.timestamp}-${idx}`}>
+                          <header>
+                            <span>{row.direction}</span>
+                            <time>{formatTime(row.timestamp)}</time>
+                          </header>
+                          <p>
+                            <b>Employee:</b> {row.employee.name || row.employee.id}
+                          </p>
+                          <p>
+                            <b>From:</b> {row.from.name || row.from.id}
+                          </p>
+                          <p>
+                            <b>To:</b> {row.to.name || row.to.id}
+                          </p>
+                          <p>
+                            <b>Delivery:</b> {row.delivery.status}
+                            {row.delivery.reason ? ` (${row.delivery.reason})` : ""}
+                          </p>
+                          <pre>{safePretty(row.payload)}</pre>
+                        </article>
+                      ))
+                    )}
+                  </div>
+                </>
+              ) : selectedEmployee ? (
                 <>
                   <div className="conversation-meta">
                     <strong>{selectedEmployee.name || selectedEmployee.id}</strong>
                     <span>{selectedEmployee.id}</span>
+                    <span>
+                      Status: {selectedEmployee.status} / Health: {selectedEmployee.health.overall}
+                    </span>
+                    <div className="conversation-tags">
+                      {selectedEmployee.tags.length === 0 ? (
+                        <span className="tag mute">no-tags</span>
+                      ) : (
+                        selectedEmployee.tags.map((tag) => (
+                          <span key={tag} className="tag">
+                            {tag}
+                          </span>
+                        ))
+                      )}
+                    </div>
                     <span>Records: {selectedConversation.length}</span>
                   </div>
                   <div className="conversation-list">
@@ -537,7 +606,9 @@ function App() {
                   </div>
                 </>
               ) : (
-                <p className="empty-text">Select a mimiclaw employee desk in the room scene.</p>
+                <p className="empty-text">
+                  Select boss building/lobster for all records, or click any worker-room object.
+                </p>
               )}
             </aside>
           </section>
@@ -609,4 +680,3 @@ function safePretty(value: unknown) {
 }
 
 export default App;
-

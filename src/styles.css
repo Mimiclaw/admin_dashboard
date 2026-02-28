@@ -472,6 +472,13 @@ code {
   word-break: break-all;
 }
 
+.conversation-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.2rem;
+}
+
 .conversation-list {
   min-height: 0;
   overflow: auto;
@@ -591,6 +598,11 @@ code {
   margin: 0;
   background: transparent;
   cursor: pointer;
+}
+
+.room-hitbox {
+  display: grid;
+  place-items: start;
 }
 
 .desk-hitbox.selected .desk-object {

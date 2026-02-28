@@ -16,6 +16,15 @@ type RoomEmployee = {
   };
 };
 
+type RoomSelectionTarget =
+  | {
+      mode: "boss";
+    }
+  | {
+      mode: "employee";
+      employeeId: string;
+    };
+
 type SceneObject = {
   id: string;
   type: string | "lobster";
@@ -24,8 +33,7 @@ type SceneObject = {
   width: number;
   height: number;
   z: number;
-  interactive?: boolean;
-  employeeId?: string;
+  clickTarget?: RoomSelectionTarget;
   noteCount?: number;
   selected?: boolean;
 };
@@ -35,7 +43,9 @@ type RelayRoomMapProps = {
   employees: RoomEmployee[];
   memoCounts: Record<string, number>;
   selectedEmployeeId: string | null;
+  selectedBoss: boolean;
   onSelectEmployee: (employeeId: string) => void;
+  onSelectBoss: () => void;
 };
 
 const MAP_CONFIG = {
@@ -60,6 +70,8 @@ type RoomLayout = {
   width: number;
   height: number;
   doors: DoorDirection[];
+  role: "boss" | "employee";
+  employeeId?: string;
 };
 
 const ROOM_VARIANTS: Array<{ item: string; size: [number, number] }> = [
@@ -133,7 +145,12 @@ function shouldSkipForDoor(centerX: number, centerY: number, pointX: number, poi
   return Math.abs(pointY - centerY) < DOOR_HALF_GAP;
 }
 
-function generateStoneRoomWalls(room: RoomLayout, allRooms: RoomLayout[]) {
+function generateStoneRoomWalls(
+  room: RoomLayout,
+  allRooms: RoomLayout[],
+  clickTarget?: RoomSelectionTarget,
+  selected = false,
+) {
   const objects: SceneObject[] = [];
   const rockAsset = "/room-assets/iron_rock.png";
   const wallStep = 28;
@@ -157,6 +174,8 @@ function generateStoneRoomWalls(room: RoomLayout, allRooms: RoomLayout[]) {
         width: displaySize,
         height: displaySize,
         z: y + displaySize,
+        clickTarget,
+        selected,
       });
     }
   };
@@ -178,6 +197,8 @@ function generateStoneRoomWalls(room: RoomLayout, allRooms: RoomLayout[]) {
         width: displaySize,
         height: displaySize,
         z: y + displaySize,
+        clickTarget,
+        selected,
       });
     }
   };
@@ -202,17 +223,18 @@ function createRoomInterior(
   cx: number,
   cy: number,
   prefix: string,
-  employeeId: string | null,
+  clickTarget: RoomSelectionTarget | undefined,
+  includeDesk: boolean,
   noteCount: number,
   selected: boolean,
   variantIndex: number,
 ) {
   const variant = ROOM_VARIANTS[variantIndex % ROOM_VARIANTS.length];
   const [vw, vh] = variant.size;
-  const isInteractiveDesk = employeeId !== null;
+  const objects: SceneObject[] = [];
 
-  const objects: SceneObject[] = [
-    {
+  if (includeDesk) {
+    objects.push({
       id: `${prefix}_desk`,
       type: "/room-assets/crafting_table.webp",
       x: cx - 64,
@@ -220,11 +242,13 @@ function createRoomInterior(
       width: 128,
       height: 128,
       z: cy + 78,
-      interactive: isInteractiveDesk,
-      employeeId: employeeId ?? undefined,
+      clickTarget,
       noteCount,
       selected,
-    },
+    });
+  }
+
+  objects.push(
     {
       id: `${prefix}_shelf`,
       type: "/room-assets/woodsign.png",
@@ -233,6 +257,8 @@ function createRoomInterior(
       width: 96,
       height: 96,
       z: cy - 54,
+      clickTarget,
+      selected,
     },
     {
       id: `${prefix}_book1`,
@@ -242,6 +268,8 @@ function createRoomInterior(
       width: 24,
       height: 24,
       z: cy - 116,
+      clickTarget,
+      selected,
     },
     {
       id: `${prefix}_book2`,
@@ -251,6 +279,8 @@ function createRoomInterior(
       width: 24,
       height: 24,
       z: cy - 116,
+      clickTarget,
+      selected,
     },
     {
       id: `${prefix}_book3`,
@@ -260,6 +290,8 @@ function createRoomInterior(
       width: 32,
       height: 32,
       z: cy - 118,
+      clickTarget,
+      selected,
     },
     {
       id: `${prefix}_lobster`,
@@ -269,6 +301,8 @@ function createRoomInterior(
       width: 64,
       height: 64,
       z: cy + 114,
+      clickTarget,
+      selected,
     },
     {
       id: `${prefix}_variant`,
@@ -278,8 +312,10 @@ function createRoomInterior(
       width: vw,
       height: vh,
       z: cy - 170 + vh,
+      clickTarget,
+      selected,
     },
-  ];
+  );
   return objects;
 }
 
@@ -355,7 +391,9 @@ function RelayRoomMap({
   employees,
   memoCounts,
   selectedEmployeeId,
+  selectedBoss,
   onSelectEmployee,
+  onSelectBoss,
 }: RelayRoomMapProps) {
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const dragRef = useRef({ startClientX: 0, startClientY: 0, startX: 0, startY: 0 });
@@ -454,6 +492,7 @@ function RelayRoomMap({
         width: ROOM_SIZE_W,
         height: ROOM_SIZE_H,
         doors: ["north", "south", "west", "east"],
+        role: "boss",
       },
     ];
 
@@ -467,14 +506,46 @@ function RelayRoomMap({
         width: ROOM_SIZE_W,
         height: ROOM_SIZE_H,
         doors: getDoorTowardsCenter(center.x, center.y),
+        role: "employee",
+        employeeId: employee.id,
       });
     });
 
     roomLayouts.forEach((room) => {
-      objects.push(...generateStoneRoomWalls(room, roomLayouts));
+      if (room.role === "employee" && room.employeeId) {
+        const employeeTarget: RoomSelectionTarget = {
+          mode: "employee",
+          employeeId: room.employeeId,
+        };
+        objects.push(
+          ...generateStoneRoomWalls(
+            room,
+            roomLayouts,
+            employeeTarget,
+            selectedEmployeeId === room.employeeId,
+          ),
+        );
+      } else {
+        objects.push(...generateStoneRoomWalls(room, roomLayouts));
+      }
     });
 
-    objects.push(...createRoomInterior(CENTER_X, CENTER_Y, "boss_room", null, 0, false, 0));
+    const bossInterior = createRoomInterior(
+      CENTER_X,
+      CENTER_Y,
+      "boss_room",
+      undefined,
+      false,
+      0,
+      false,
+      0,
+    );
+    const bossLobster = bossInterior.find((item) => item.id === "boss_room_lobster");
+    if (bossLobster) {
+      bossLobster.clickTarget = { mode: "boss" };
+      bossLobster.selected = selectedBoss;
+    }
+    objects.push(...bossInterior);
     objects.push(
       {
         id: "boss_sign",
@@ -484,6 +555,10 @@ function RelayRoomMap({
         width: 128,
         height: 128,
         z: CENTER_Y + 18,
+        clickTarget: {
+          mode: "boss",
+        },
+        selected: selectedBoss,
       },
       {
         id: "boss_mailbox",
@@ -499,12 +574,17 @@ function RelayRoomMap({
     employees.forEach((employee, index) => {
       const center = centers[index];
       const roomPrefix = `employee_${employee.id}`;
+      const employeeTarget: RoomSelectionTarget = {
+        mode: "employee",
+        employeeId: employee.id,
+      };
       objects.push(
         ...createRoomInterior(
           center.x,
           center.y,
           roomPrefix,
-          employee.id,
+          employeeTarget,
+          true,
           memoCounts[employee.id] ?? 0,
           selectedEmployeeId === employee.id,
           index + 1,
@@ -518,11 +598,13 @@ function RelayRoomMap({
         width: 48,
         height: 64,
         z: center.y - 136,
+        clickTarget: employeeTarget,
+        selected: selectedEmployeeId === employee.id,
       });
     });
 
     return objects.sort((a, b) => a.z - b.z);
-  }, [employees, memoCounts, selectedEmployeeId]);
+  }, [employees, memoCounts, selectedBoss, selectedEmployeeId]);
 
   const roomLabel = boss?.name || "OpenClaw";
 
@@ -542,12 +624,12 @@ function RelayRoomMap({
         ref={viewportRef}
         onMouseDown={(event) => {
           const target = event.target as HTMLElement;
-          if (target.closest("[data-interactive='desk']")) return;
+          if (target.closest("[data-interactive='room-object']")) return;
           startDrag(event.clientX, event.clientY);
         }}
         onTouchStart={(event) => {
           const target = event.target as HTMLElement;
-          if (target.closest("[data-interactive='desk']")) return;
+          if (target.closest("[data-interactive='room-object']")) return;
           if (event.touches.length === 0) return;
           const touch = event.touches[0];
           startDrag(touch.clientX, touch.clientY);
@@ -565,6 +647,52 @@ function RelayRoomMap({
             }}
           >
             {sceneObjects.map((obj) => {
+              if (obj.clickTarget) {
+                const target = obj.clickTarget;
+                const isBossTarget = target.mode === "boss";
+                return (
+                  <button
+                    key={obj.id}
+                    type="button"
+                    data-interactive="room-object"
+                    className={`desk-hitbox room-hitbox ${obj.selected ? "selected" : ""}`}
+                    style={{
+                      left: `${obj.x}px`,
+                      top: `${obj.y}px`,
+                      width: `${obj.width}px`,
+                      height: `${obj.height}px`,
+                    }}
+                    onMouseDown={(event) => event.stopPropagation()}
+                    onTouchStart={(event) => event.stopPropagation()}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      if (target.mode === "boss") {
+                        onSelectBoss();
+                        return;
+                      }
+                      onSelectEmployee(target.employeeId);
+                    }}
+                    title={isBossTarget ? "Open boss conversations" : "Open employee conversations"}
+                  >
+                    {obj.type === "lobster" ? (
+                      <div className="lobster-bounce" style={{ width: "100%", height: "100%" }}>
+                        <div className="pixel-lobster" />
+                      </div>
+                    ) : (
+                      <img
+                        src={obj.type}
+                        alt={obj.id}
+                        className="map-object desk-object"
+                        style={{ width: `${obj.width}px`, height: `${obj.height}px` }}
+                      />
+                    )}
+                    {obj.noteCount !== undefined && (
+                      <span className="desk-note-badge">{obj.noteCount}</span>
+                    )}
+                  </button>
+                );
+              }
+
               if (obj.type === "lobster") {
                 return (
                   <div
@@ -580,38 +708,6 @@ function RelayRoomMap({
                   >
                     <div className="pixel-lobster" />
                   </div>
-                );
-              }
-
-              if (obj.interactive && obj.employeeId) {
-                return (
-                  <button
-                    key={obj.id}
-                    type="button"
-                    data-interactive="desk"
-                    className={`desk-hitbox ${obj.selected ? "selected" : ""}`}
-                    style={{
-                      left: `${obj.x}px`,
-                      top: `${obj.y}px`,
-                      width: `${obj.width}px`,
-                      height: `${obj.height}px`,
-                    }}
-                    onMouseDown={(event) => event.stopPropagation()}
-                    onTouchStart={(event) => event.stopPropagation()}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      onSelectEmployee(obj.employeeId as string);
-                    }}
-                    title="Open meeting notes"
-                  >
-                    <img
-                      src={obj.type}
-                      alt={obj.id}
-                      className="map-object desk-object"
-                      style={{ width: `${obj.width}px`, height: `${obj.height}px` }}
-                    />
-                    <span className="desk-note-badge">{obj.noteCount ?? 0}</span>
-                  </button>
                 );
               }
 
